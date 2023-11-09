@@ -44,7 +44,7 @@ Restart your server
 Since we will be using Jupyter Notebooks for this exercise, we will use the Anaconda command prompt to create our virtual environment. 
 In the command line type: 
 
-    conda create -n NSM_env python=3.9.12
+    conda create -n NWMML_env python=3.9.12
 
 For this example, we will be using Python version 3.9.12, specify this version when setting up your new virtual environment.
 After Anaconda finishes setting up your NSM_env , activate it using the activate function.
