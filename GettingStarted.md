@@ -57,6 +57,10 @@ We begin by installing the **ipykernel** python package:
 
     pip install --user ipykernel
 
+The ulmo package supports getting Snotel data but is tricky to install:
+
+    conda install -c conda-forge ulmo
+
 With the package installed, we can connect the NSM_env to our Python Notebook
 
     python -m ipykernel install --user --name=NWMML_env 
