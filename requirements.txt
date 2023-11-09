@@ -20,4 +20,7 @@ streamstats
 tables==3.8.0
 xarray==2023.5.0
 xgboost==1.7.5
+ee
+earthengine-api
+
 
