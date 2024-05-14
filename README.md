@@ -18,11 +18,11 @@ The workflow leverages the power of the physically-based NWM v2.1 retrospective 
 * Basin slope - Percent of catchment with a slope greater than 30 degrees
 
 **NWM**
-*v2.1 retrospective flows resampled to a daily temporal resolution
+* v2.1 retrospective flows resampled to a daily temporal resolution
 
 **Seasonality Metrics**
-*S1
-*S2
+* S1
+* S2
 
 **United States Bureau of Reclamation**
 * Upstream catchment storage - Percent of full capacity
@@ -42,8 +42,6 @@ The workflow leverages the power of the physically-based NWM v2.1 retrospective 
 
 **United States Geological Survey**
 * National Water Information System (NWIS) streamflow monitoring informatin for colocated NHDPlus reaches for training/testing targets
-
-
 
 Funding for this project was provided by the National Oceanic and Atmospheric Administration (NOAA), and awarded to the Cooperative Institute for Research to Operations in Hydrology (CIROH) through the NOAA Cooperative Agreement with The University of Alabama, NA22NWS4320003.
 

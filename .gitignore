@@ -1,4 +1,5 @@
-Savalan/01.script/01.data_preparation/nwisiv_cache.sqlite
+*nwisiv_cache.sqlite
 *.csv
 *.parquet
 *.ipynb_checkpoints
+*__pycache
