@@ -21,6 +21,11 @@ The workflow leverages the power of the physically-based NWM v2.1 retrospective 
 * v2.1 retrospective flows resampled to a daily temporal resolution
 
 **Seasonality Metrics**
+
+![Seasonality](./Images/seasonalityindex.JPG)
+
+The runoff in the basins follows a strong seasonal pattern with a noticeable yearly cycle, and this data needs to be communicated to the NN. The seasonality index provides this information by using two time series that, when combined, represent the 12-month cycle. 
+The oscillation of a sine curve depicts one series, while a cosine curve represents the other. Twelve pairs of values capture the annual cycle, each uniquely representing a month.
 * S1
 * S2
 
