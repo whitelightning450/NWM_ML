@@ -167,7 +167,7 @@ def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, x_
         sites_targ_test_dict[site] = y[-test_len:]
 
     #combine sites into one dataframe for model training
-    X_train =np.zeros((1,5,14))
+    X_train =np.zeros((1,lookback,len(input_columns)))
     y_train = np.zeros((1,))
     for site in sites:
         X_train = np.concatenate([X_train, sites_feat_train_dict[site]], axis = 0)
