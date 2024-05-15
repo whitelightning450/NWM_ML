@@ -148,19 +148,34 @@ def Key_Stats(DF, predictions):
     eval_dict['min_obs_flow'] = min(DF['flow_cfs'])
     eval_dict['max_obs_flow'] = max(DF['flow_cfs'])
     for pred in predictions:
-        eval_dict[f"{pred}_flow_min"] = min(DF[pred])
-        eval_dict[f"{pred}_flow_max"] = max(DF[pred])
+        eval_dict[f"{pred}_min"] = min(DF[pred])
+        eval_dict[f"{pred}_fmax"] = max(DF[pred])
 
     eval = pd.DataFrame.from_dict(eval_dict, orient = 'index').T
     return eval
 
-def Simple_Eval(Preds_Dict, prediction_columns, modelname):
+def Simple_Eval(Preds_Dict, prediction_columns, modelname, supply = False):
     sites = list(Preds_Dict.keys())
     Eval_DF = pd.DataFrame()
 
     for site in sites:
-        #plot the predictions
         df = Preds_Dict[site].copy()
+
+        if supply == True:
+            #plot the predictions
+            cols = ['Datetime', 'flow_cfs'] + prediction_columns
+            df_CumSum = df[cols]
+            cols.remove('Datetime')
+            df_CumSum['Year'] = pd.to_datetime(df_CumSum['Datetime']).dt.year
+            df_CumSum.set_index('Datetime', inplace = True)
+
+            df_CumSum2 = pd.DataFrame(columns=cols)
+
+            for col in cols:
+                df_CumSum2[col] = df_CumSum.groupby(['Year'])[col].cumsum()
+            df_CumSum2.reset_index(inplace=True)
+            df.update(df_CumSum2)
+
         print(f"USGS site: {site}")
         Model_Evaluation_Plots(df, prediction_columns)
 
@@ -180,12 +195,15 @@ def Simple_Eval(Preds_Dict, prediction_columns, modelname):
         #Print key site characterstics
         stats = Key_Stats(df, prediction_columns)
 
-        evaldf = pd.concat([kge,rmse,mape,pbias,stats],axis = 1)
+        site_df = pd.DataFrame()
+
+        evaldf = pd.concat([site_df, kge,rmse,mape,pbias,stats],axis = 1)
+        evaldf['station_id'] = site
 
         Eval_DF = pd.concat([Eval_DF, evaldf])
 
     Eval_DF.sort_values(by = [f"{modelname}_flow_kge"], ascending=False, inplace = True)
-    Eval_DF.reset_index(inplace = True, drop= True)
+    Eval_DF.set_index('station_id', inplace = True)
     return Eval_DF
         
 
