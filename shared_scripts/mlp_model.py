@@ -317,3 +317,68 @@ def mlp_optimization(search_params,
                                             counter = counter +1
 
     return GS_Eval_DF, GS_Eval_dict
+
+def Final_Model(GS_Eval_DF,
+                x_train_scaled_t,
+                y_train_scaled_t, 
+                loss_func, 
+                model_path, 
+                modelname,
+                test_years, 
+                stations, 
+                x_test_temp,
+                x_test_scaled, 
+                y_test_temp,
+                StreamStats,
+                station_index_list):
+
+    #Train the model with optimized parameters
+    # parameters
+    epochs = GS_Eval_DF['Epochs'].values[0] # 
+    batch_size = int(GS_Eval_DF['Batchsize'].values[0])
+    learning_rate = 0.0001  
+    decay = GS_Eval_DF['Decay'].values[0]
+    L1 = GS_Eval_DF['L1'].values[0]
+    L2 = GS_Eval_DF['L2'].values[0]
+    L3 = GS_Eval_DF['L3'].values[0]
+    L4 = GS_Eval_DF['L4'].values[0]
+    L5 = GS_Eval_DF['L5'].values[0]
+    L6 = GS_Eval_DF['L6'].values[0]
+    layers = x_train_scaled_t.shape[1], L1, L2, L3, L4, L5, L6
+    params =  learning_rate, decay, epochs, batch_size
+    loss_func = nn.MSELoss()
+
+    #Train the model
+    mlp_train(x_train_scaled_t,
+                        y_train_scaled_t, 
+                        layers, 
+                        params, 
+                        loss_func, 
+                        model_path, 
+                        modelname, 
+                        shuffle = True)
+
+
+    #Make a prediction for each location, save as compressed pkl file, and send predictions to AWS for use in CSES
+    Preds_Dict = mlp_predict(test_years, 
+                        layers, 
+                        model_path, 
+                        modelname, 
+                        stations, 
+                        x_test_temp,
+                        x_test_scaled, 
+                        y_test_temp,
+                        StreamStats,
+                        station_index_list)
+
+    #Evaluate model performance of the different models, 'flow_cfs_pred', 
+    prediction_columns = ['NWM_flow', f"{modelname}_flow"]
+    Eval_DF = Simple_Eval.Simple_Eval(Preds_Dict, 
+                                    prediction_columns, 
+                                    modelname, 
+                                    supply = False,
+                                    plots = True, 
+                                    keystats = False        
+                                    )
+    
+    return Eval_DF, Preds_Dict
