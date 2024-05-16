@@ -154,7 +154,7 @@ def Key_Stats(DF, predictions):
     eval = pd.DataFrame.from_dict(eval_dict, orient = 'index').T
     return eval
 
-def Simple_Eval(Preds_Dict, prediction_columns, modelname, supply = False):
+def Simple_Eval(Preds_Dict, prediction_columns, modelname, supply = False, plots = False, keystats = False):
     sites = list(Preds_Dict.keys())
     Eval_DF = pd.DataFrame()
 
@@ -176,28 +176,33 @@ def Simple_Eval(Preds_Dict, prediction_columns, modelname, supply = False):
             df_CumSum2.reset_index(inplace=True)
             df.update(df_CumSum2)
 
-        print(f"USGS site: {site}")
-        Model_Evaluation_Plots(df, prediction_columns)
+        if plots == True:
+            print(f"USGS site: {site}")
+            Model_Evaluation_Plots(df, prediction_columns)
 
         #put the below into a DF so we can compare all sites..
         #Get RMSE from the model
-        rmse = RMSE(df, prediction_columns)
+        rmse = round(RMSE(df, prediction_columns))
 
         #Get Mean Absolute Percentage Error from the model
-        mape = MAPE(df, prediction_columns)
+        mape = round(MAPE(df, prediction_columns),2)
 
         #Get Percent Bias from the model
-        pbias = PBias(df, prediction_columns)
+        pbias = round(PBias(df, prediction_columns), 2)
 
         #Get Kling-Gutz Efficiency from the model
-        kge = KGE(df, prediction_columns)
+        kge = round(KGE(df, prediction_columns),2)
 
         #Print key site characterstics
-        stats = Key_Stats(df, prediction_columns)
+        if keystats == True:
+            stats = Key_Stats(df, prediction_columns)
+
+            site_df = pd.DataFrame()
+
+            evaldf = pd.concat([site_df, kge,rmse,mape,pbias,stats],axis = 1)
 
         site_df = pd.DataFrame()
-
-        evaldf = pd.concat([site_df, kge,rmse,mape,pbias,stats],axis = 1)
+        evaldf = pd.concat([site_df, kge,rmse,mape,pbias],axis = 1)
         evaldf['station_id'] = site
 
         Eval_DF = pd.concat([Eval_DF, evaldf])
