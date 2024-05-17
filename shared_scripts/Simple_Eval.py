@@ -154,9 +154,16 @@ def Key_Stats(DF, predictions):
     eval = pd.DataFrame.from_dict(eval_dict, orient = 'index').T
     return eval
 
-def Simple_Eval(Preds_Dict, prediction_columns, modelname, supply = False, plots = False, keystats = False):
+def Simple_Eval(Preds_Dict, prediction_columns, modelname, supply = False, plots = False, keystats = False, first = False):
     sites = list(Preds_Dict.keys())
     Eval_DF = pd.DataFrame()
+
+    if first == True:
+        site = sites[0]
+        df = Preds_Dict[site].copy()
+        df.reset_index(inplace = True, drop = False)
+        print(f"USGS site: {site}")
+        Model_Evaluation_Plots(df, prediction_columns)
 
     for site in sites:
         df = Preds_Dict[site].copy()
@@ -178,6 +185,7 @@ def Simple_Eval(Preds_Dict, prediction_columns, modelname, supply = False, plots
 
         if plots == True:
             print(f"USGS site: {site}")
+            df.reset_index(inplace = True, drop = False)
             Model_Evaluation_Plots(df, prediction_columns)
 
         #put the below into a DF so we can compare all sites..
