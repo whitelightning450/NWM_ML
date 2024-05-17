@@ -8,7 +8,7 @@ import pandas as pd
 import os
 import pyarrow as pa
 import pyarrow.parquet as pq
-import bz2file as bz2
+
 
 # system packages
 from progressbar import ProgressBar
@@ -84,8 +84,6 @@ def get_ML_Data(datapath, trainingfile):
 
     #Get processed training data 
     datapath = f"{HOME}/NWM_ML/Data/Processed"
-    #file = "raw_training_data.parquet"  #note, this file has no swe or storage, all 0s
-    file = "final_input.parquet"
     filepath = f"{datapath}/{trainingfile}"
     try:
         df = pd.read_parquet(filepath)
@@ -93,7 +91,8 @@ def get_ML_Data(datapath, trainingfile):
         print("Data not found, retreiving from AWS S3")
         if not os.path.exists(datapath):
             os.makedirs(datapath, exist_ok=True)
-        key = "NWM_ML"+datapath.split("NWM_ML",1)[1]+'/'+file       
+        key = "NWM_ML"+datapath.split("NWM_ML",1)[1]+'/'+trainingfile     
+        print(key)  
         S3.meta.client.download_file(BUCKET_NAME, key,filepath)
         df = pd.read_parquet(filepath)
 
