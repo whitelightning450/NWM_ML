@@ -16,8 +16,7 @@ import torch.optim as optim
 import torch.utils.data as data
 from torch.autograd import Variable
 from sklearn.preprocessing import StandardScaler
-
-
+from sklearn.preprocessing import MinMaxScaler
 
 #packages to load AWS data
 import boto3
@@ -115,24 +114,48 @@ def create_lookback_multivariate(dataset, lookback):
     return np.array(X), np.array(y)
 
 # split a multivariate sequences into train/test
-def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, x_scaler_path, y_scaler_path, random_shuffle = True):
+def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, model_path, scalertype):
+
+    #convert dates to datetime format
+    df.datetime = pd.to_datetime(df.datetime)
+
+    # #reset index to clean up df
+    df.reset_index( inplace =  True, drop = True)
+
+    scalername_x = "scaler_x.save"
+    scalername_y = "scaler_y.save"
+    x_scaler_path = f"{model_path}/{scalername_x}"
+    y_scaler_path = f"{model_path}/{scalername_y}"
+
     #create training df to create scalers
     train_df = df[~df.datetime.dt.year.isin(test_years)].copy()
     train_features_df = train_df[input_columns].copy()
     train_targets_df = train_df[target].copy()
 
-    #scale X training data and save
-    xscaler = StandardScaler()
-    x_scaler = xscaler.fit(train_features_df)
-    joblib.dump(x_scaler, x_scaler_path)
 
-    #scale Y training data and save
-    yscaler = StandardScaler()
-    y_scaler = yscaler.fit(train_targets_df)
-    joblib.dump(y_scaler, y_scaler_path)
+    if scalertype == 'MinMax':
+        #scale X training data and save
+        xscaler = MinMaxScaler()
+        x_scaler = xscaler.fit(train_features_df)
+        joblib.dump(x_scaler, x_scaler_path)
 
-    #set datetime to index
-    # df.set_index('datetime', inplace = True)
+        #scale Y training data and save
+        yscaler = MinMaxScaler()
+        y_scaler = yscaler.fit(train_targets_df)
+        joblib.dump(y_scaler, y_scaler_path)
+
+
+    if scalertype == 'Standard':
+        #scale X training data and save
+        xscaler = StandardScaler()
+        x_scaler = xscaler.fit(train_features_df)
+        joblib.dump(x_scaler, x_scaler_path)
+
+        #scale Y training data and save
+        yscaler = StandardScaler()
+        y_scaler = yscaler.fit(train_targets_df)
+        joblib.dump(y_scaler, y_scaler_path)
+
 
     #separate each site to create the appropariate lookback, scale as necessary
     sites = list(df['station_id'].unique())
@@ -177,15 +200,15 @@ def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, x_
     X_train = X_train[1:,:,:]
     y_train = y_train[1:,]
 
-    #do a random shuffle
-    if random_shuffle == True:
-        np.random.seed(69)
-        train = list(zip(X_train, y_train))
-        np.random.shuffle(train)
+    # #do a random shuffle - no need for this, you can do it in the tensorflow
+    # if random_shuffle == True:
+    #     np.random.seed(69)
+    #     train = list(zip(X_train, y_train))
+    #     np.random.shuffle(train)
 
-        X_train, y_train = zip(*train)
-        X_train = np.array(X_train)
-        y_train = np.array(y_train)
+    #     X_train, y_train = zip(*train)
+    #     X_train = np.array(X_train)
+    #     y_train = np.array(y_train)
 
     #need to convert to float32, tensors of the expected shape, and make sure they are on the device
     X_train = Variable(torch.from_numpy(X_train).float(), requires_grad=False).to(DEVICE)

@@ -131,8 +131,6 @@ def mlp_predict(test_years, layers, model_path, modelname, stations, x_test_temp
 
     model.load_state_dict(torch.load(f"{model_path}/{modelname}_model.pkl"))
 
-
-
     Preds_Dict = {}
     for station_number in station_index_list.drop_duplicates():
         index = station_index_list == station_number
@@ -194,10 +192,7 @@ def mlp_predict(test_years, layers, model_path, modelname, stations, x_test_temp
         Preds_Dict[station_number].insert(1, "NWM_flow", Preds_Dict[station_number].pop("NWM_flow"))
         Preds_Dict[station_number].insert(1, "flow_cfs", Preds_Dict[station_number].pop("flow_cfs"))
         Preds_Dict[station_number].insert(1, "nwm_feature_id", Preds_Dict[station_number].pop("nwm_feature_id"))
-        Preds_Dict[station_number].insert(1, "station_id", Preds_Dict[station_number].pop("station_id"))
-
-    #push data to AWS so we can use CSES
-    
+        Preds_Dict[station_number].insert(1, "station_id", Preds_Dict[station_number].pop("station_id"))  
     
     #save predictions as compressed pkl file
     pred_path = f"{HOME}/NWM_ML/Predictions/Hindcast/{modelname}/Multilocation"
@@ -229,6 +224,7 @@ def mlp_optimization(search_params,
     
     GS_Eval_DF = pd.DataFrame()
     GS_Eval_dict = {}
+    GS_Pred_dict = {}
 
     n_models = len(epochs)*len(batch_size)*len(learning_rate)*len(decay)*len(L1)*len(L2)*len(L3)*len(L4)*len(L5)*len(L6)
     print(f"Optimizing the {modelname} model by evaluating {n_models} models using grid search validation")
@@ -312,11 +308,14 @@ def mlp_optimization(search_params,
 
                                             #add to overall df
                                             GS_Eval_DF = pd.concat([GS_Eval_DF, model_df])
-                                            GS_Eval_DF.sort_values(by = f"{modelname}_flow_kge")
                                             GS_Eval_dict[kge] = Eval_DF
+                                            GS_Pred_dict[kge] = Preds_Dict
                                             counter = counter +1
+    #Sort by kge
+    GS_Eval_DF.sort_values(by = f"{modelname}_flow_kge", ascending = False, inplace = True)
+    GS_Eval_DF.reset_index(inplace=True, drop = True)
 
-    return GS_Eval_DF, GS_Eval_dict
+    return GS_Eval_DF, GS_Eval_dict, GS_Pred_dict
 
 def Final_Model(GS_Eval_DF,
                 x_train_scaled_t,
