@@ -2,14 +2,15 @@
 import hydroeval as he
 from hydrotools.nwm_client import utils 
 from tqdm.notebook import tqdm_notebook
+from time import process_time 
+from copy import deepcopy
+
+
 
 # basic packages
 import numpy as np
 import pandas as pd
 import os
-import pyarrow as pa
-import pyarrow.parquet as pq
-import bz2file as bz2
 
 # system packages
 from progressbar import ProgressBar
@@ -70,63 +71,131 @@ fs = s3fs.S3FileSystem(anon=False, key=ACCESS['Access key ID'][0], secret=ACCESS
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Device:", DEVICE)
 
-def lstm_model_arch(bidirectional, input_shape, neurons, num_layers):
-    # Build the model
-    model = nn.LSTM(input_size=input_shape, 
-                    hidden_size=neurons, 
-                    num_layers = num_layers,
-                    bidirectional=bidirectional, 
-                    batch_first=True).to(DEVICE)
-    if bidirectional == True: # Multiply by 2 for bidirectional LSTM
-        neurons = neurons * 2
-    fc = nn.Linear(neurons, 1).to(DEVICE)  
+
+#build a simple LSTM model
+class Simple_LSTM(nn.Module):
+    def __init__(self, 
+                 input_size: int = 1, 
+                 hidden_size: int = 50, 
+                 num_layers: int = 1, 
+                 bidirectional: bool = False,
+                 batch_first: bool = True):
+        
+        super().__init__()
+        self.lstm = nn.LSTM(input_size = input_size,
+                            hidden_size = hidden_size,
+                            num_layers = num_layers,
+                            bidirectional=bidirectional, 
+                            batch_first = batch_first
+                            ).to(DEVICE) 
+        if bidirectional == True: # Multiply by 2 for bidirectional LSTM
+            hidden_size = hidden_size * 2
+        self.linear = nn.Linear(hidden_size,1).to(DEVICE) 
+
+    def forward(self, X):
+        X, _ = self.lstm(X)
+        X = self.linear(X)
+        return X
+
+# def lstm_model_arch(bidirectional, input_shape, neurons, num_layers):
+#     # Build the model
+#     model = nn.LSTM(input_size=input_shape, 
+#                     hidden_size=neurons, 
+#                     num_layers = num_layers,
+#                     bidirectional=bidirectional, 
+#                     batch_first=True).to(DEVICE)
+#     if bidirectional == True: # Multiply by 2 for bidirectional LSTM
+#         neurons = neurons * 2
+#     fc = nn.Linear(neurons, 1).to(DEVICE)  
 
 
-    return model, fc
+    # return model, fc
 
 
-def LSTM_train(model_params, loss_func, x_train_scaled_t, y_train_scaled_t, shuffle, model_path,modelname):
+def LSTM_train(model_params, loss_func, X, y, shuffle, model_path,modelname):
+
     epochs, batch_size, learning_rate, decay, neurons, num_layers, bidirectional = model_params
     print(f"Epochs: {epochs}, Batch size: {batch_size}, LR: {learning_rate}, Decay: {decay}, Neurons: {neurons}, Number Layers: {num_layers}, Bidirectional: {bidirectional}")
 
-    input_shape = x_train_scaled_t.shape[2]
-    start_time = time.time()
+    input_shape = X.shape[2]
+
+    #split training data into train/test
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=69)
 
     # Create PyTorch datasets and dataloaders
     torch.manual_seed(69)
-    train_dataset = TensorDataset(x_train_scaled_t, y_train_scaled_t)
+    train_dataset = TensorDataset(X_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle ) #
 
     # Build the model, 
-    model, fc = lstm_model_arch(bidirectional, input_shape, neurons, num_layers)
+    #model, fc = lstm_model_arch(bidirectional, input_shape, neurons, num_layers) 
+    model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional)
 
     # Define loss and optimizer - change loss criterian (e.g. MSE), differnt optizers
     criterion = loss_func
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay) #
+    t1_start = process_time()
 
     # Training loop 
     for epoch in tqdm_notebook(range(epochs), desc= "Epochs completed"):
         model.train()
-        fc.train()
+        #fc.train()
         total_loss = 0.0
         for batch_x, batch_y in train_loader:
             batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
-            output, _ = model(batch_x)
-            output = fc(output[:, -1, :])
+            # output, _ = model(batch_x)
+            # output = fc(output[:, -1, :])
+            output = model(batch_x)
             loss = criterion(output, batch_y)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
+            #total_loss += loss.item()
+         # Print training data error as the model trains itself
+        if epoch % 2 != 0:
+            continue
+        model.eval()
 
-        print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader)}") # # out once model begins showing loss
+        with torch.no_grad():
+            y_pred = model(X_train)
+            #must detach from GPU and put to CPU to calculate model performance
+            train_rmse = np.sqrt(criterion(y_pred, y_train).detach().cpu().numpy())
+            y_pred = model(X_test)
+            test_rmse = np.sqrt(criterion(y_pred, y_test).detach().cpu().numpy())
+        print("Epoch %d: train RMSE %.4f, test RMSE %.4f" % (epoch, train_rmse, test_rmse))
+        
+    t1_stop = process_time()
+    print("Model training took:", t1_stop-t1_start, ' seconds') 
 
-    print('finish')
-    print("Run Time:" + " %s seconds " % ((time.time() - start_time)))
-    if os.path.exists(model_path) == False:
-        os.mkdir(model_path)
-    torch.save(model.state_dict(), f"{model_path}/{modelname}_model.pkl")
-    torch.save(fc.state_dict(), f"{model_path}/{modelname}_model_fc.pkl")
+    #save model
+    best_model = deepcopy(model.state_dict())
+    torch.save(best_model,f"{model_path}/{modelname}_model.pt" )
+
+    print('Training Complete')
+
+
+
+
+
+    #     print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader)}") # # out once model begins showing loss
+
+    # print('finish')
+    # print("Run Time:" + " %s seconds " % ((time.time() - start_time)))
+    # if os.path.exists(model_path) == False:
+    #     os.mkdir(model_path)
+    # torch.save(model.state_dict(), f"{model_path}/{modelname}_model.pkl")
+    # torch.save(fc.state_dict(), f"{model_path}/{modelname}_model_fc.pkl")
+
+def LSTM_load(model, model_path):
+    model.load_state_dict(torch.load(model_path))
+    model.eval()
+    if DEVICE.type == 'cuda':
+        print('model is on cuda')
+        model = model.cuda()
+    else:
+        print('Model on cpu')
+
+    return model
 
 
 def LSTM_predict(model_params, test_years, df, X_test_dic, input_shape, StreamStats, model_path, modelname):
@@ -138,11 +207,14 @@ def LSTM_predict(model_params, test_years, df, X_test_dic, input_shape, StreamSt
     x_test_temp = df[df.datetime.dt.year.isin(test_years)]
 
 
-    model, fc = lstm_model_arch(bidirectional, input_shape, neurons, num_layers)
+    #model, fc = lstm_model_arch(bidirectional, input_shape, neurons, num_layers)
 
     #this requires the model structure to be preloaded
-    model.load_state_dict(torch.load(f"{model_path}/{modelname}_model.pkl"))
-    fc.load_state_dict(torch.load(f"{model_path}/{modelname}_model_fc.pkl"))
+    # model.load_state_dict(torch.load(f"{model_path}/{modelname}_model.pkl"))
+    # fc.load_state_dict(torch.load(f"{model_path}/{modelname}_model_fc.pkl"))
+    model_file = f"{model_path}/{modelname}_model.pt" 
+    model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional)
+    model = LSTM_load(model, model_file)
 
     #load y scaler
     scaler_y = joblib.load(y_scaler_path)
@@ -159,8 +231,10 @@ def LSTM_predict(model_params, test_years, df, X_test_dic, input_shape, StreamSt
         # Evaluation
         model.eval()
         with torch.no_grad():
-            predictions_scaled, _ = model(X_test_scaled_t)
-            predictions_scaled = fc(predictions_scaled[:, -1, :])
+            # predictions_scaled, _ = model(X_test_scaled_t)
+            # predictions_scaled = fc(predictions_scaled[:, -1, :])
+            predictions_scaled = model(X_test_scaled_t)
+            predictions_scaled = predictions_scaled[:, -1, :]
 
         # Invert scaling for actual
         predictions = scaler_y.inverse_transform(predictions_scaled.to('cpu').numpy())
@@ -224,7 +298,8 @@ def LSTM_optimization(df,
                     shuffle,  
                     modelname,
                     StreamStats,
-                    supply):
+                    supply,
+                    plot):
     
     epochs, lookback, batch_size, learning_rate, decay, neurons,num_layers, bidirectional = training_params
     
@@ -285,8 +360,9 @@ def LSTM_optimization(df,
                                                                     prediction_columns, 
                                                                     modelname, 
                                                                     supply = supply,
-                                                                    plots = False, 
-                                                                    keystats = False        
+                                                                    plots = plot, 
+                                                                    keystats = False,
+                                                                    first = True      
                                                                     )
 
                                     #create dataframe to store key model perf metrics, and inputs
@@ -327,13 +403,13 @@ def LSTM_optimization(df,
 
 def Final_Model(df,
                 GS_Eval_DF,
-                x_train_scaled_t,
-                y_train_scaled_t, 
+                input_columns,
+                target,
                 loss_func, 
+                scalertype,
                 model_path, 
                 modelname,
                 test_years, 
-                X_test_dic,
                 StreamStats,
                 supply,
                 shuffle):
@@ -346,9 +422,19 @@ def Final_Model(df,
     num_layers = GS_Eval_DF['num_layers'].values[0]
     bidirectional = GS_Eval_DF['Bidirectional'].values[0]  
     neurons = int(GS_Eval_DF['Neurons'].values[0])
+    lookback = int(GS_Eval_DF['Lookback'].values[0])
+
+    print(f"Processing data for lookback length: {lookback}")
+    x_train_scaled_t, X_test_dic, y_train_scaled_t, y_test_dic = lstm_dataprocessing.Multisite_DataProcessing(df, 
+                                                                            input_columns, 
+                                                                            target, 
+                                                                            lookback, 
+                                                                            test_years, 
+                                                                            model_path,
+                                                                            scalertype) 
     input_shape = x_train_scaled_t.shape[2]
 
-    if bidirectional == 'True':
+    if bidirectional == True:
         bidirectional = True
     else:
         bidirectional = False
@@ -380,7 +466,7 @@ def Final_Model(df,
                                     prediction_columns, 
                                     modelname, 
                                     supply = supply,
-                                    plots = False, 
+                                    plots = True, 
                                     keystats = False        
                                     )
 
