@@ -116,6 +116,12 @@ def create_lookback_multivariate(dataset, lookback):
 # split a multivariate sequences into train/test
 def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, model_path, scalertype):
 
+    #convert dates to datetime format
+    df.datetime = pd.to_datetime(df.datetime)
+
+    # #reset index to clean up df
+    df.reset_index( inplace =  True, drop = True)
+
     scalername_x = "scaler_x.save"
     scalername_y = "scaler_y.save"
     x_scaler_path = f"{model_path}/{scalername_x}"

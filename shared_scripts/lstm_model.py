@@ -87,7 +87,8 @@ def lstm_model_arch(bidirectional, input_shape, neurons, num_layers):
 
 def LSTM_train(model_params, loss_func, x_train_scaled_t, y_train_scaled_t, shuffle, model_path,modelname):
     epochs, batch_size, learning_rate, decay, neurons, num_layers, bidirectional = model_params
-    print(batch_size)
+    print(f"Epochs: {epochs}, Batch size: {batch_size}, LR: {learning_rate}, Decay: {decay}, Neurons: {neurons}, Number Layers: {num_layers}, Bidirectional: {bidirectional}")
+
     input_shape = x_train_scaled_t.shape[2]
     start_time = time.time()
 
@@ -212,102 +213,175 @@ def LSTM_predict(model_params, test_years, df, X_test_dic, input_shape, StreamSt
     return Preds_Dict
 
 
-def LSTM_optimization(training_params,
-                        loss_func,
-                        x_train_scaled_t,
-                        y_train_scaled_t, 
-                        shuffle,  
-                        model_path,
-                        modelname,
-                        model_params, 
-                        test_years, 
-                        df, 
-                        X_test_dic, 
-                        input_shape, 
-                        StreamStats,
-                        supply):
-
-    epochs, batch_size, learning_rate, decay, neurons,num_layers, bidirectional = training_params
+def LSTM_optimization(df, 
+                    input_columns, 
+                    target, 
+                    test_years, 
+                    model_path,
+                    scalertype,
+                    training_params,
+                    loss_func,
+                    shuffle,  
+                    modelname,
+                    StreamStats,
+                    supply):
+    
+    epochs, lookback, batch_size, learning_rate, decay, neurons,num_layers, bidirectional = training_params
     
     GS_Eval_DF = pd.DataFrame()
     GS_Eval_dict = {}
     GS_Pred_dict = {}
 
-    n_models = len(epochs)*len(batch_size)*len(learning_rate)*len(decay)*len(neurons)*len(bidirectional)
+    n_models = len(epochs)*len(batch_size)*len(learning_rate)*len(decay)*len(neurons)*len(bidirectional)*len(lookback)
     print(f"Optimizing the {modelname} model by evaluating {n_models} models using grid search validation")
 
     counter = 1
 
     #loop through the differnet model parameters
     for e in epochs:
-        for b in batch_size:
-            for lr in learning_rate:
-                for d in decay:
-                    for n in neurons:
-                        for l in num_layers:
-                            for bi in bidirectional:
-                                #Train the model
-                                print(f"Training {counter} of {n_models} models")
-                                params = e, b, lr, d, n, l, bi
-                                model_params = bi, input_shape, n, l
-                                
-                                print(f"Parameters: {params}")
-                                LSTM_train(params,
-                                        loss_func,
-                                            x_train_scaled_t,
-                                            y_train_scaled_t, 
-                                            shuffle, 
-                                            model_path,
-                                            modelname)
+        for look in lookback:
+               #add scaler option - minmax standard
+            x_train_scaled_t, X_test_dic, y_train_scaled_t, y_test_dic = lstm_dataprocessing.Multisite_DataProcessing(df, 
+                                                                                   input_columns, 
+                                                                                   target, 
+                                                                                   look, 
+                                                                                   test_years, 
+                                                                                   model_path,
+                                                                                   scalertype) 
+            input_shape = x_train_scaled_t.shape[2]
+            for b in batch_size:
+                for lr in learning_rate:
+                    for d in decay:
+                        for n in neurons:
+                            for l in num_layers:
+                                for bi in bidirectional:
+                                    #Train the model
+                                    print(f"Training {counter} of {n_models} models")
+                                    params = e, b, lr, d, n, l, bi
+                                    model_params = bi, input_shape, n, l
+                                    print(f"Lookback: {lookback}")
+                                    print(f"feature shape: {x_train_scaled_t.shape}, Test shape: {y_train_scaled_t.shape}")
+                                    
+                                    LSTM_train(params,
+                                            loss_func,
+                                                x_train_scaled_t,
+                                                y_train_scaled_t, 
+                                                shuffle, 
+                                                model_path,
+                                                modelname)
 
-                                Preds_Dict = LSTM_predict(model_params, 
-                                                        test_years, 
-                                                        df, 
-                                                        X_test_dic, 
-                                                        input_shape, 
-                                                        StreamStats, 
-                                                        model_path, 
-                                                        modelname)
+                                    Preds_Dict = LSTM_predict(model_params, 
+                                                            test_years, 
+                                                            df, 
+                                                            X_test_dic, 
+                                                            input_shape, 
+                                                            StreamStats, 
+                                                            model_path, 
+                                                            modelname)
 
-                                #Evaluate model performance of the different models, 'flow_cfs_pred', 
-                                prediction_columns = ['NWM_flow', f"{modelname}_flow"]
-                                Eval_DF = Simple_Eval.Simple_Eval(Preds_Dict, 
-                                                                prediction_columns, 
-                                                                modelname, 
-                                                                supply = supply,
-                                                                plots = False, 
-                                                                keystats = False        
-                                                                )
+                                    #Evaluate model performance of the different models, 'flow_cfs_pred', 
+                                    prediction_columns = ['NWM_flow', f"{modelname}_flow"]
+                                    Eval_DF = Simple_Eval.Simple_Eval(Preds_Dict, 
+                                                                    prediction_columns, 
+                                                                    modelname, 
+                                                                    supply = supply,
+                                                                    plots = False, 
+                                                                    keystats = False        
+                                                                    )
 
-                                #create dataframe to store key model perf metrics, and inputs
-                                cols = [f"{modelname}_flow_kge", f"{modelname}_flow_rmse", f"{modelname}_flow_mape", f"{modelname}_flow_pbias"]
-                                model_eval = Eval_DF[cols].copy()
+                                    #create dataframe to store key model perf metrics, and inputs
+                                    cols = [f"{modelname}_flow_kge", f"{modelname}_flow_rmse", f"{modelname}_flow_mape", f"{modelname}_flow_pbias"]
+                                    model_eval = Eval_DF[cols].copy()
 
-                                #Get mean scoring metrics for AOI - aver kge, mape, pbias
-                                model_eval = pd.DataFrame(model_eval.mean(axis=0)).T
+                                    #Get mean scoring metrics for AOI - aver kge, mape, pbias
+                                    model_eval = pd.DataFrame(model_eval.mean(axis=0)).T
 
-                                #Add model parameters
-                                parm_dict = {'Epochs': [e],
-                                            'Batchsize': [b],
-                                            'LR': [lr],
-                                            'Decay':[d],
-                                            'Neurons':[n],
-                                            'Bidirectional':[bi]}
-                                params_df = pd.DataFrame.from_dict(parm_dict)
+                                    #Add model parameters
+                                    parm_dict = {'Epochs': [e],
+                                                 "Lookback":[look],
+                                                'Batchsize': [b],
+                                                'LR': [lr],
+                                                'Decay':[d],
+                                                'Neurons':[n],
+                                                'Bidirectional':[bi],
+                                                'num_layers':[l]}
+                                    params_df = pd.DataFrame.from_dict(parm_dict)
 
-                                #combine model eval df with params df
-                                model_df = pd.concat([model_eval, params_df], axis = 1)
-                                kge = round(model_df[f"{modelname}_flow_kge"].values[0],2)
+                                    #combine model eval df with params df
+                                    model_df = pd.concat([model_eval, params_df], axis = 1)
+                                    kge = round(model_df[f"{modelname}_flow_kge"].values[0],2)
 
-                                display(Eval_DF)
+                                    display(Eval_DF)
 
-                                #add to overall df
-                                GS_Eval_DF = pd.concat([GS_Eval_DF, model_df])
-                                GS_Eval_dict[kge] = Eval_DF
-                                GS_Pred_dict[kge] = Preds_Dict
-                                counter = counter +1
+                                    #add to overall df
+                                    GS_Eval_DF = pd.concat([GS_Eval_DF, model_df])
+                                    GS_Eval_dict[kge] = Eval_DF
+                                    GS_Pred_dict[kge] = Preds_Dict
+                                    counter = counter +1
     #Sort by kge
     GS_Eval_DF.sort_values(by = f"{modelname}_flow_kge", ascending = False, inplace = True)
     GS_Eval_DF.reset_index(inplace=True, drop = True)
 
     return GS_Eval_DF, GS_Eval_dict, GS_Pred_dict
+
+
+def Final_Model(df,
+                GS_Eval_DF,
+                x_train_scaled_t,
+                y_train_scaled_t, 
+                loss_func, 
+                model_path, 
+                modelname,
+                test_years, 
+                X_test_dic,
+                StreamStats,
+                supply,
+                shuffle):
+    
+    #set optimial model params    
+    epochs = GS_Eval_DF['Epochs'].values[0] # 
+    batch_size = int(GS_Eval_DF['Batchsize'].values[0])
+    learning_rate = GS_Eval_DF['LR'].values[0]
+    decay = GS_Eval_DF['Decay'].values[0]   
+    num_layers = GS_Eval_DF['num_layers'].values[0]
+    bidirectional = GS_Eval_DF['Bidirectional'].values[0]  
+    neurons = int(GS_Eval_DF['Neurons'].values[0])
+    input_shape = x_train_scaled_t.shape[2]
+
+    if bidirectional == 'True':
+        bidirectional = True
+    else:
+        bidirectional = False
+
+    params = epochs, batch_size, learning_rate, decay, neurons, num_layers, bidirectional
+    model_params = bidirectional, input_shape, neurons, num_layers
+
+    #Train the model with optimized parameters
+    LSTM_train(params,
+            loss_func,
+            x_train_scaled_t,
+            y_train_scaled_t, 
+            shuffle, 
+            model_path,
+            modelname)
+
+    Preds_Dict = LSTM_predict(model_params, 
+                            test_years, 
+                            df, 
+                            X_test_dic, 
+                            input_shape, 
+                            StreamStats, 
+                            model_path, 
+                            modelname)
+
+    #Evaluate model performance of the different models, 'flow_cfs_pred', 
+    prediction_columns = ['NWM_flow', f"{modelname}_flow"]
+    Eval_DF = Simple_Eval.Simple_Eval(Preds_Dict, 
+                                    prediction_columns, 
+                                    modelname, 
+                                    supply = supply,
+                                    plots = False, 
+                                    keystats = False        
+                                    )
+
+    return Eval_DF, Preds_Dict
