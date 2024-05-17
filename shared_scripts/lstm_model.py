@@ -97,20 +97,6 @@ class Simple_LSTM(nn.Module):
         X = self.linear(X)
         return X
 
-# def lstm_model_arch(bidirectional, input_shape, neurons, num_layers):
-#     # Build the model
-#     model = nn.LSTM(input_size=input_shape, 
-#                     hidden_size=neurons, 
-#                     num_layers = num_layers,
-#                     bidirectional=bidirectional, 
-#                     batch_first=True).to(DEVICE)
-#     if bidirectional == True: # Multiply by 2 for bidirectional LSTM
-#         neurons = neurons * 2
-#     fc = nn.Linear(neurons, 1).to(DEVICE)  
-
-
-    # return model, fc
-
 
 def LSTM_train(model_params, loss_func, X, y, model_path,modelname):
 
@@ -134,19 +120,16 @@ def LSTM_train(model_params, loss_func, X, y, model_path,modelname):
     loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False ) #
 
     # Build the model, 
-    #model, fc = lstm_model_arch(bidirectional, input_shape, neurons, num_layers) 
     model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional, batch_first = True)
 
     # Define loss and optimizer - change loss criterian (e.g. MSE), differnt optizers
-    #optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay) #
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay) #
+    #optimizer = optim.Adam(model.parameters())
     t1_start = process_time()
 
     # Training loop 
     for epoch in tqdm_notebook(range(epochs), desc= "Epochs completed"):
         model.train()
-        #fc.train()
-        #total_loss = 0.0
         for X_batch, y_batch in loader:
             X_batch, y_batch = X_batch.to(DEVICE), y_batch.to(DEVICE)
             y_pred = model(X_batch)
@@ -178,17 +161,6 @@ def LSTM_train(model_params, loss_func, X, y, model_path,modelname):
 
 
 
-
-
-    #     print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader)}") # # out once model begins showing loss
-
-    # print('finish')
-    # print("Run Time:" + " %s seconds " % ((time.time() - start_time)))
-    # if os.path.exists(model_path) == False:
-    #     os.mkdir(model_path)
-    # torch.save(model.state_dict(), f"{model_path}/{modelname}_model.pkl")
-    # torch.save(fc.state_dict(), f"{model_path}/{modelname}_model_fc.pkl")
-
 def LSTM_load(model, model_path):
     model.load_state_dict(torch.load(model_path))
     model.eval()
@@ -209,12 +181,7 @@ def LSTM_predict(model_params, test_years, df, X_test_dic, input_shape, StreamSt
     #get dataframe for testing
     x_test_temp = df[df.datetime.dt.year.isin(test_years)]
 
-
-    #model, fc = lstm_model_arch(bidirectional, input_shape, neurons, num_layers)
-
     #this requires the model structure to be preloaded
-    # model.load_state_dict(torch.load(f"{model_path}/{modelname}_model.pkl"))
-    # fc.load_state_dict(torch.load(f"{model_path}/{modelname}_model_fc.pkl"))
     model_file = f"{model_path}/{modelname}_model.pt" 
     model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional)
     model = LSTM_load(model, model_file)
@@ -234,8 +201,6 @@ def LSTM_predict(model_params, test_years, df, X_test_dic, input_shape, StreamSt
         # Evaluation
         model.eval()
         with torch.no_grad():
-            # predictions_scaled, _ = model(X_test_scaled_t)
-            # predictions_scaled = fc(predictions_scaled[:, -1, :])
             predictions_scaled = model(X_test_scaled_t)
             predictions_scaled = predictions_scaled[:, -1, :]
 
