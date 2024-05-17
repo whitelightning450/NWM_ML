@@ -112,7 +112,7 @@ class Simple_LSTM(nn.Module):
     # return model, fc
 
 
-def LSTM_train(model_params, loss_func, X, y, shuffle, model_path,modelname):
+def LSTM_train(model_params, loss_func, X, y, model_path,modelname):
 
     epochs, batch_size, learning_rate, decay, neurons, num_layers, bidirectional = model_params
     print(f"Epochs: {epochs}, Batch size: {batch_size}, LR: {learning_rate}, Decay: {decay}, Neurons: {neurons}, Number Layers: {num_layers}, Bidirectional: {bidirectional}")
@@ -120,48 +120,51 @@ def LSTM_train(model_params, loss_func, X, y, shuffle, model_path,modelname):
     input_shape = X.shape[2]
 
     #split training data into train/test
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=69)
+    #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=69)
+    train_ratio = 0.67
+    trainlength = int(train_ratio*len(X))
+    X_train = X[:trainlength,:,:]
+    X_test = X[trainlength:,:,:]
+    y_train = y[:trainlength,]
+    y_test = y[trainlength:,]
 
     # Create PyTorch datasets and dataloaders
     torch.manual_seed(69)
     train_dataset = TensorDataset(X_train, y_train)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle ) #
+    loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False ) #
 
     # Build the model, 
     #model, fc = lstm_model_arch(bidirectional, input_shape, neurons, num_layers) 
-    model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional)
+    model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional, batch_first = True)
 
     # Define loss and optimizer - change loss criterian (e.g. MSE), differnt optizers
-    criterion = loss_func
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay) #
+    #optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay) #
+    optimizer = optim.Adam(model.parameters())
     t1_start = process_time()
 
     # Training loop 
     for epoch in tqdm_notebook(range(epochs), desc= "Epochs completed"):
         model.train()
         #fc.train()
-        total_loss = 0.0
-        for batch_x, batch_y in train_loader:
-            batch_x, batch_y = batch_x.to(DEVICE), batch_y.to(DEVICE)
-            # output, _ = model(batch_x)
-            # output = fc(output[:, -1, :])
-            output = model(batch_x)
-            loss = criterion(output, batch_y)
+        #total_loss = 0.0
+        for X_batch, y_batch in loader:
+            X_batch, y_batch = X_batch.to(DEVICE), y_batch.to(DEVICE)
+            y_pred = model(X_batch)
+            loss = loss_func(y_pred, y_batch)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            #total_loss += loss.item()
          # Print training data error as the model trains itself
-        if epoch % 2 != 0:
+        if epoch % 10 != 0:
             continue
         model.eval()
 
         with torch.no_grad():
             y_pred = model(X_train)
             #must detach from GPU and put to CPU to calculate model performance
-            train_rmse = np.sqrt(criterion(y_pred, y_train).detach().cpu().numpy())
+            train_rmse = np.sqrt(loss_func(y_pred, y_train).detach().cpu().numpy())
             y_pred = model(X_test)
-            test_rmse = np.sqrt(criterion(y_pred, y_test).detach().cpu().numpy())
+            test_rmse = np.sqrt(loss_func(y_pred, y_test).detach().cpu().numpy())
         print("Epoch %d: train RMSE %.4f, test RMSE %.4f" % (epoch, train_rmse, test_rmse))
         
     t1_stop = process_time()
@@ -295,7 +298,6 @@ def LSTM_optimization(df,
                     scalertype,
                     training_params,
                     loss_func,
-                    shuffle,  
                     modelname,
                     StreamStats,
                     supply,
@@ -341,7 +343,6 @@ def LSTM_optimization(df,
                                             loss_func,
                                                 x_train_scaled_t,
                                                 y_train_scaled_t, 
-                                                shuffle, 
                                                 model_path,
                                                 modelname)
 
@@ -447,7 +448,6 @@ def Final_Model(df,
             loss_func,
             x_train_scaled_t,
             y_train_scaled_t, 
-            shuffle, 
             model_path,
             modelname)
 

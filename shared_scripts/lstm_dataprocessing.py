@@ -133,7 +133,7 @@ def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, mo
     train_targets_df = train_df[target].copy()
 
 
-    if scalertype == 'MinMax':
+    if scalertype == 'MinMaxScaler':
         #scale X training data and save
         xscaler = MinMaxScaler()
         x_scaler = xscaler.fit(train_features_df)
@@ -143,9 +143,10 @@ def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, mo
         yscaler = MinMaxScaler()
         y_scaler = yscaler.fit(train_targets_df)
         joblib.dump(y_scaler, y_scaler_path)
+        print(f"{scalertype} applied")
 
 
-    if scalertype == 'Standard':
+    if scalertype == 'StandardScaler':
         #scale X training data and save
         xscaler = StandardScaler()
         x_scaler = xscaler.fit(train_features_df)
@@ -155,6 +156,7 @@ def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, mo
         yscaler = StandardScaler()
         y_scaler = yscaler.fit(train_targets_df)
         joblib.dump(y_scaler, y_scaler_path)
+        print(f"{scalertype} applied")
 
 
     #separate each site to create the appropariate lookback, scale as necessary
@@ -199,6 +201,13 @@ def Multisite_DataProcessing(df, input_columns, target, lookback, test_years, mo
     #remove filler zero
     X_train = X_train[1:,:,:]
     y_train = y_train[1:,]
+
+    # feats = X_train.shape[2]
+    # for f in np.arange(0,feats,1):
+    #     print(f)
+    #     print(f"Features Max: {max(X_train[:,0,f])}, Min: {min(X_train[:,0,f])}")
+    # print(f"Target Max: {max(y_train[:,])}, Min: {min(y_train[:,])}")
+
 
     # #do a random shuffle - no need for this, you can do it in the tensorflow
     # if random_shuffle == True:
