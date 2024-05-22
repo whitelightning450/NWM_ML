@@ -20,6 +20,8 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.model_selection import RepeatedKFold
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import train_test_split
+from matplotlib import pyplot
+
 
 #Shared/Utility scripts
 import os
@@ -68,16 +70,31 @@ class XGBoostRegressorCV:
         #joblib.dump(grid_search, self.path)
         pkl.dump(grid_search, open(self.path, "wb")) 
 
-    def train(self, X, y, parameters={}):
+    def train(self, input_columns, X, y, parameters={}):
         """Trains the model using the best hyperparameters found."""
         if self.best_model:
             self.best_model.fit(X, y)
+
+            # feature importance
+            imp, feats = zip(*sorted(zip(self.best_model.feature_importances_, input_columns)))
+
+            # plot
+            pyplot.barh(feats, imp)
+            pyplot.show()
         else:
             eta = parameters.best_params_['eta']
             max_depth =parameters.best_params_['max_depth']
             n_estimators = parameters.best_params_['n_estimators']
             self.model.fit(X, y, n_estimators=n_estimators, max_depth=max_depth, eta=eta, verbose=True)
             print("Please tune hyperparameters first.")
+
+            # feature importance
+            # feature importance
+            imp, feats = zip(*sorted(zip(self.model.feature_importances_, input_columns), reverse=True))
+
+            # plot
+            pyplot.barh(feats, imp)
+            pyplot.show()
 
     def predict(self, X):
         """Predicts using the trained XGBoost model on the provided data."""
@@ -104,7 +121,7 @@ class XGBoostRegressorCV:
             print("Model is not trained yet. Please train the model first.")
 
 
-def XGB_Train(model_path, station_index_list, x_train, y_train, tries, hyperparameters, perc_data):
+def XGB_Train(model_path, input_columns, station_index_list, x_train, y_train, tries, hyperparameters, perc_data):
     start_time = time.time()
 
     # Start running the model several times. 
@@ -118,7 +135,7 @@ def XGB_Train(model_path, station_index_list, x_train, y_train, tries, hyperpara
         xgboost_model.tune_hyperparameters(x_train.iloc[:new_data_len], y_train.iloc[:new_data_len])
         xgboost_model.evaluate(x_train.iloc[:new_data_len], y_train.iloc[:new_data_len])
         print('Training model with optimized hyperparameters')
-        xgboost_model.train(x_train, y_train)
+        xgboost_model.train(input_columns, x_train, y_train)
         print('Saving Model')
         
         #adjust this to match changing models
