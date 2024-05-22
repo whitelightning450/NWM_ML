@@ -20,7 +20,7 @@ def TS_plot(dictionary, model, plotname, title, freq, supply = False, fill_betwe
     #print(keys)
 
     #make figure
-    fig, ax = plt.subplots(3,3, figsize=(10, 10), gridspec_kw={'hspace': 0.4, 'wspace': 0.4})
+    fig, ax = plt.subplots(3,2, figsize=(10, 10), gridspec_kw={'hspace': 0.4, 'wspace': 0.4})
     
     ax = ax.ravel()
     
@@ -47,6 +47,8 @@ def TS_plot(dictionary, model, plotname, title, freq, supply = False, fill_betwe
             RegionDF['Year'] = RegionDF.index.year
             RegionDF['Obs_flow'] = RegionDF['Obs_flow']/1000
             RegionDF['NWM_flow'] = RegionDF['NWM_flow']/1000
+            RegionDF[f"{model}_flow"] = RegionDF[f"{model}_flow"]/1000
+
             
 
             #RegionDF = pd.DataFrame(columns=columns)
@@ -55,9 +57,9 @@ def TS_plot(dictionary, model, plotname, title, freq, supply = False, fill_betwe
                 RegionDF[site] = RegionDF.groupby(['Year'])[site].cumsum()        
         
         #fig.patch.set_facecolor('white')
-        ax[i].plot(RegionDF.index.values, RegionDF['Obs_flow'].values, color = 'green')
-        #ax[i].plot(RegionDF.index, RegionDF[f"{model}_flow"],  color = 'orange')
-        ax[i].plot(RegionDF.index.values, RegionDF['NWM_flow'].values,  color = 'blue')
+        ax[i].plot(RegionDF.index.values, RegionDF['Obs_flow'].values, color = 'blue')
+        ax[i].plot(RegionDF.index, RegionDF[f"{model}_flow"].values,  color = 'orange')
+        ax[i].plot(RegionDF.index.values, RegionDF['NWM_flow'].values,  color = 'green')
         ax[i].xaxis.set_major_locator(MonthLocator())
         ax[i].xaxis.set_major_formatter(DateFormatter('%m'))
 
@@ -74,21 +76,21 @@ def TS_plot(dictionary, model, plotname, title, freq, supply = False, fill_betwe
             ax[i].set_xticklabels([])
         
             
-        if i == 3:
+        if i == 2:
             ax[i].set_ylabel(f"Flow ({units})", fontsize = 12)
             #ax[i].set_xlabel('Date', fontsize = 12)
             #ax[i].tick_params(axis='x', rotation=45)
             
-        if i < 6:
+        if i < 4:
             ax[i].set_xticklabels([])
             
-        if i == 6:
+        if i == 4:
             ax[i].set_ylabel(f"Flow ({units})", fontsize = 12)
             ax[i].set_xlabel('Month', fontsize = 12)
             ax[i].tick_params(axis='x', rotation=45)
-            ax[i].plot(RegionDF.index.values, RegionDF['Obs_flow'].values, color = 'green', label = 'Obs Flow ')
-            #ax[i].plot(RegionDF.index.values, RegionDF[f"{model}_flow"].values,  color = 'orange', label = f"{model} flow" )
-            ax[i].plot(RegionDF.index.values, RegionDF['NWM_flow'].values,  color = 'blue', label = f"NWM flow" )
+            ax[i].plot(RegionDF.index.values, RegionDF['Obs_flow'].values, color = 'blue', label = 'Obs Flow ')
+            ax[i].plot(RegionDF.index.values, RegionDF[f"{model}_flow"].values,  color = 'orange', label = f"{model} flow" )
+            ax[i].plot(RegionDF.index.values, RegionDF['NWM_flow'].values,  color = 'green', label = f"NWM flow" )
             ax[i].legend( loc = 'lower center', bbox_to_anchor = (0, -0.0, 1, 0),  bbox_transform = plt.gcf().transFigure, ncol = 3)
             
         if i > 6:
@@ -101,7 +103,7 @@ def TS_plot(dictionary, model, plotname, title, freq, supply = False, fill_betwe
     fig.suptitle(title, fontsize = 16)
     figpath = f"{HOME}/NWM-ML/Predictions/Hindcast/{model}/Figures"
     if os.path.exists(figpath)==False:
-        os.mkdir(figpath)
+        os.makedirs(figpath)
     plt.savefig(f"{figpath}/{plotname}_{freq}_{supply}.png", dpi = 600, bbox_inches = 'tight')
     plt.show()
     
