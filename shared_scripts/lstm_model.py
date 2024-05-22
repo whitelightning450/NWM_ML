@@ -50,6 +50,10 @@ import s3fs
 sys.path.insert(0, '../..')  #sys allows for the .ipynb file to connect to the shared folder files
 from shared_scripts import lstm_dataprocessing, Simple_Eval
 
+#set global pytorch memory size to allow training larger batch sizes
+torch.backends.cudnn.benchmark=True
+# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:500 "
+
 #load access key
 HOME = os.path.expanduser('~')
 KEYPATH = "NWM_ML/AWSaccessKeys.csv"
@@ -79,7 +83,8 @@ class Simple_LSTM(nn.Module):
                  hidden_size: int = 50, 
                  num_layers: int = 1, 
                  bidirectional: bool = False,
-                 batch_first: bool = True):
+                 batch_first: bool = True,
+                 batch_size: int = 50):
         
         super().__init__()
         self.lstm = nn.LSTM(input_size = input_size,
@@ -88,20 +93,32 @@ class Simple_LSTM(nn.Module):
                             bidirectional=bidirectional, 
                             batch_first = batch_first
                             ).to(DEVICE) 
+        
         if bidirectional == True: # Multiply by 2 for bidirectional LSTM
+            print(f"Bidirectional: {bidirectional}")
             hidden_size = hidden_size * 2
+
         self.linear = nn.Linear(hidden_size,1).to(DEVICE) 
 
+    def init_hidden(self):
+        return (torch.zeros(self.num_layers, self.batch_size, self.hidden_size),
+                torch.zeros(self.num_layers, self.batch_size, self.hidden_size))
+
     def forward(self, X):
-        X, _ = self.lstm(X)
+        X, self.hidden= self.lstm(X)
         X = self.linear(X)
         return X
+    
+# # Define our hook, which will call the optimizer ``step()`` and ``zero_grad()``
+# def optimizer_hook(optimizer_dict, parameter) -> None:
+#     optimizer_dict[parameter].step()
+#     optimizer_dict[parameter].zero_grad()
 
 
-def LSTM_train(model_params, loss_func, X, y, model_path,modelname):
+def LSTM_train(model_params, loss_func, X, y, model_path,modelname, lookback):
 
     epochs, batch_size, learning_rate, decay, neurons, num_layers, bidirectional = model_params
-    print(f"Epochs: {epochs}, Batch size: {batch_size}, LR: {learning_rate}, Decay: {decay}, Neurons: {neurons}, Number Layers: {num_layers}, Bidirectional: {bidirectional}")
+    print(f"Epochs: {epochs}, Batch size: {batch_size}, LR: {learning_rate}, Decay: {decay}, Neurons: {neurons}, Number Layers: {num_layers}, Bidirectional: {bidirectional}, Lookback: {lookback}")
 
     input_shape = X.shape[2]
 
@@ -114,44 +131,53 @@ def LSTM_train(model_params, loss_func, X, y, model_path,modelname):
     y_train = y[:trainlength,]
     y_test = y[trainlength:,]
 
-    # Create PyTorch datasets and dataloaders
-    torch.manual_seed(69)
-    train_dataset = TensorDataset(X_train, y_train)
-    loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False ) #
 
     # Build the model, 
-    model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional, batch_first = True)
+    model = Simple_LSTM(input_shape, neurons, num_layers, bidirectional = bidirectional, batch_first = True, batch_size = batch_size)
 
     # Define loss and optimizer - change loss criterian (e.g. MSE), differnt optizers
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=decay) #
-    #optimizer = optim.Adam(model.parameters())
+    chunks = lookback**2
+    chunksize = int(round(trainlength/chunks))
     t1_start = process_time()
+    for chunk in np.arange(0,chunks,1):
+        # Create PyTorch datasets and dataloaders
+        torch.manual_seed(69)
+        chunk_0 = chunksize*chunk
+        chunk_1 = chunksize*(chunk+1)
+        X_train_chunk, y_train_chunk = X_train[chunk_0:chunk_1,:,:],y_train[chunk_0:chunk_1,]
 
-    # Training loop 
-    for epoch in tqdm_notebook(range(epochs), desc= "Epochs completed"):
-        model.train()
-        for X_batch, y_batch in loader:
-            X_batch, y_batch = X_batch.to(DEVICE), y_batch.to(DEVICE)
-            y_pred = model(X_batch)
-            loss = loss_func(y_pred, y_batch)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-         # Print training data error as the model trains itself
-        if epoch % 10 != 0:
-            continue
-        model.eval()
+        # if len(X_train_chunk) == chunksize:
+        train_dataset = TensorDataset(X_train_chunk, y_train_chunk)
+        loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False ) #
 
-        with torch.no_grad():
-            y_pred = model(X_train)
-            #must detach from GPU and put to CPU to calculate model performance
-            train_rmse = np.sqrt(loss_func(y_pred, y_train).detach().cpu().numpy())
-            y_pred = model(X_test)
-            test_rmse = np.sqrt(loss_func(y_pred, y_test).detach().cpu().numpy())
-        print("Epoch %d: train RMSE %.4f, test RMSE %.4f" % (epoch, train_rmse, test_rmse))
-        
-    t1_stop = process_time()
-    print("Model training took:", t1_stop-t1_start, ' seconds') 
+        # Training loop 
+        for epoch in tqdm_notebook(range(epochs), desc= "Epochs completed"):
+            model.train()
+            #total_loss = 0.0
+            for X_batch, y_batch in loader:
+                X_batch, y_batch = X_batch.to(DEVICE), y_batch.to(DEVICE)
+                y_pred = model(X_batch)
+                loss = loss_func(y_pred, y_batch)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            #   total_loss += loss.item()
+            # Print training data error as the model trains itself
+            if epoch % 10 != 0:
+                continue
+            model.eval()
+
+            with torch.no_grad():
+                y_pred = model(X_train_chunk)
+                #must detach from GPU and put to CPU to calculate model performance
+                train_rmse = np.sqrt(loss_func(y_pred, y_train_chunk).detach().cpu().numpy())
+                y_pred = model(X_test)
+                test_rmse = np.sqrt(loss_func(y_pred, y_test).detach().cpu().numpy())
+            #print("Epoch %d: train RMSE %.4f, test RMSE %.4f" % (epoch, train_rmse, test_rmse))
+    # else:
+    #t1_stop = process_time()
+        # print("Model training took:", t1_stop-t1_start, ' seconds') 
 
     #save model
     best_model = deepcopy(model.state_dict())
@@ -301,7 +327,7 @@ def LSTM_optimization(df,
                                     print(f"Training {counter} of {n_models} models")
                                     params = e, b, lr, d, n, l, bi
                                     model_params = bi, input_shape, n, l
-                                    print(f"Lookback: {lookback}")
+                                    #print(f"Lookback: {lookback}")
                                     print(f"feature shape: {x_train_scaled_t.shape}, Test shape: {y_train_scaled_t.shape}")
                                     
                                     LSTM_train(params,
@@ -309,7 +335,8 @@ def LSTM_optimization(df,
                                                 x_train_scaled_t,
                                                 y_train_scaled_t, 
                                                 model_path,
-                                                modelname)
+                                                modelname,
+                                                look)
 
                                     Preds_Dict = LSTM_predict(model_params, 
                                                             test_years, 

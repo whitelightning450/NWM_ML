@@ -162,6 +162,8 @@ def mlp_predict(test_years, layers, model_path, modelname, stations, x_test_temp
 
         predictions = pd.DataFrame(predictions, columns=[f"{modelname}_flow"])
 
+        predictions[f"{modelname}_flow"][predictions[f"{modelname}_flow"]< 0] =0.1
+
         #save predictions, need to convert to NHDPlus reach - Need to add Datetime column and flow predictions
         #make daterange
         dates = pd.date_range(pd.to_datetime(f"{test_years[0]}-01-01"), periods=len(predictions)).strftime("%Y-%m-%d").tolist()
@@ -335,7 +337,7 @@ def Final_Model(GS_Eval_DF,
     # parameters
     epochs = GS_Eval_DF['Epochs'].values[0] # 
     batch_size = int(GS_Eval_DF['Batchsize'].values[0])
-    learning_rate = 0.0001  
+    learning_rate =  GS_Eval_DF['LR'].values[0]
     decay = GS_Eval_DF['Decay'].values[0]
     L1 = GS_Eval_DF['L1'].values[0]
     L2 = GS_Eval_DF['L2'].values[0]
@@ -345,6 +347,10 @@ def Final_Model(GS_Eval_DF,
     L6 = GS_Eval_DF['L6'].values[0]
     layers = x_train_scaled_t.shape[1], L1, L2, L3, L4, L5, L6
     params =  learning_rate, decay, epochs, batch_size
+
+                                            
+    print(f"Parameters: {params}")
+    print(f"Layers: {layers}")
     loss_func = nn.MSELoss()
 
     #Train the model
